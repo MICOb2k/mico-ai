@@ -40,7 +40,7 @@
     </div>
 
     <script>
-        const API_KEY = "AQ.Ab8RN6IGGjLMOO1EjZZwf_GgeTp3oBwg0hSgCFpxsAaeHp91Mw";
+                const API_KEY = "AQ.Ab8RN6IGGjLMOO1EjZZwf_GgeTp3oBwg0hSgCFpxsAaeHp91Mw";
 
         async function sendMessage() {
             const inputField = document.getElementById('user-input');
@@ -81,7 +81,11 @@
                 const data = await response.json();
                 document.getElementById(loadingId).remove();
 
-                const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || "My bad, something went wrong with the API.";
+                if (!response.ok) {
+                    throw new Error(data.error?.message || `HTTP error! status: ${response.status}`);
+                }
+
+                const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || "No response received.";
 
                 // Append AI Response
                 chatContainer.innerHTML += `
@@ -95,7 +99,7 @@
                 chatContainer.innerHTML += `
                     <div class="flex justify-start">
                         <div class="bg-red-950 border border-red-800 text-red-200 rounded-2xl p-3 max-w-[80%] text-sm shadow">
-                            Connection error. Check your API key or internet.
+                            Error: ${escapeHtml(err.message)}
                         </div>
                     </div>`;
             }
@@ -108,6 +112,7 @@
 
         document.getElementById('user-input').addEventListener('keypress', function (e) {
             if (e.key === 'Enter') sendMessage();
+        
         });
     </script>
 </body>
