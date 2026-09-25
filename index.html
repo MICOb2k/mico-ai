@@ -8,6 +8,17 @@
     <link rel="icon" href="icon.png">
     <meta name="theme-color" content="#020617">
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Marked.js for Markdown & Code Highlighting -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        pre { background: #090d16; padding: 12px; border-radius: 8px; overflow-x: auto; margin-top: 8px; margin-bottom: 8px; border: 1px solid #1e293b; }
+        code { font-family: monospace; color: #34d399; font-size: 13px; }
+        p { margin-bottom: 6px; }
+        p:last-child { margin-bottom: 0; }
+        ul, ol { margin-left: 16px; margin-bottom: 6px; }
+        ul { list-style-type: disc; }
+        ol { list-style-type: decimal; }
+    </style>
 </head>
 <body class="bg-slate-950 text-slate-100 h-screen flex flex-col justify-between overflow-hidden">
 
@@ -17,25 +28,21 @@
             <img src="icon.png" alt="Logo" class="w-9 h-9 rounded-xl object-cover border border-slate-700 shadow">
             <div>
                 <h1 class="font-bold text-sm tracking-wide text-emerald-400">M I C O A I</h1>
-                <p class="text-[10px] text-slate-400">Online & Ready</p>
+                <p class="text-[10px] text-slate-400">Elite Edition • Online</p>
             </div>
         </div>
-        <!-- Install Button (Hidden by default until browser triggers it) -->
-        <button id="install-btn" class="hidden bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg shadow transition">
-            Install App
-        </button>
+        <div class="flex items-center space-x-2">
+            <button onclick="clearHistory()" class="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs px-2.5 py-1.5 rounded-lg border border-slate-700 transition">Clear</button>
+            <button id="install-btn" class="hidden bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg shadow transition">Install</button>
+        </div>
     </header>
 
     <!-- Chat Container -->
     <div id="chat-container" class="flex-1 overflow-y-auto p-4 space-y-4 text-sm">
-        <div class="flex justify-start">
-            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-3 max-w-[80%] text-sm text-slate-200 shadow">
-                What's up! I'm M I C O AI. How can I help you crush it today? You can also attach screenshots or images using the button below!
-            </div>
-        </div>
+        <!-- Chat history populates here -->
     </div>
 
-    <!-- Image Preview Bar (Hidden until image selected) -->
+    <!-- Image Preview Bar -->
     <div id="preview-container" class="hidden px-4 py-2 bg-slate-900 border-t border-slate-800 flex items-center space-x-2">
         <img id="image-preview" class="w-12 h-12 object-cover rounded-lg border border-slate-700">
         <span class="text-xs text-slate-300 truncate flex-1">Image attached</span>
@@ -44,54 +51,83 @@
 
     <!-- Input Bar -->
     <div class="bg-slate-900 border-t border-slate-800 p-3 flex items-center space-x-2">
-        <!-- Hidden File Input for Images -->
         <input type="file" id="image-input" accept="image/*" class="hidden" onchange="handleImageSelect(event)">
-        
-        <!-- Image Upload Button -->
         <button onclick="document.getElementById('image-input').click()" class="bg-slate-800 hover:bg-slate-700 text-slate-300 p-2.5 rounded-xl border border-slate-700 transition flex items-center justify-center">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
         </button>
-
-        <!-- Text Input -->
         <input type="text" id="user-input" placeholder="Ask M I C O AI anything..." class="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-emerald-500 text-slate-100 placeholder-slate-500">
-        
-        <!-- Send Button -->
-        <button onclick="sendMessage()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold px-4 py-2.5 rounded-xl text-sm transition shadow">
-            Send
-        </button>
+        <button onclick="sendMessage()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold px-4 py-2.5 rounded-xl text-sm transition shadow">Send</button>
     </div>
 
     <script>
         const API_KEY = "AQ.Ab8RN6IGGjLMOO1EjZZwf_GgeTp3oBwg0hSgCFpxsAaeHp91Mw";
         let selectedBase64Image = null;
         let selectedMimeType = null;
+        let chatHistory = JSON.parse(localStorage.getItem('mico_ai_history')) || [];
 
         // PWA Install Prompt Handler
         let deferredPrompt;
         const installBtn = document.getElementById('install-btn');
-
         window.addEventListener('beforeinstallprompt', (e) => {
             e.preventDefault();
             deferredPrompt = e;
             installBtn.classList.remove('hidden');
         });
-
         installBtn.addEventListener('click', async () => {
             if (deferredPrompt) {
                 deferredPrompt.prompt();
                 const { outcome } = await deferredPrompt.userChoice;
-                if (outcome === 'accepted') {
-                    installBtn.classList.add('hidden');
-                }
+                if (outcome === 'accepted') installBtn.classList.add('hidden');
                 deferredPrompt = null;
             }
         });
 
-        // Handle Image Selection
+        function renderChat() {
+            const container = document.getElementById('chat-container');
+            if (chatHistory.length === 0) {
+                container.innerHTML = `
+                    <div class="flex justify-start">
+                        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-3 max-w-[80%] text-sm text-slate-200 shadow">
+                            What's up! I'm M I C O AI. Your elite assistant is online and ready. How can we crush it today?
+                        </div>
+                    </div>`;
+                return;
+            }
+            
+            container.innerHTML = '';
+            chatHistory.forEach(msg => {
+                if (msg.role === 'user') {
+                    let imgHtml = msg.image ? `<div class="mb-2"><img src="${msg.image}" class="rounded-lg max-h-32 object-cover border border-emerald-500/30"></div>` : '';
+                    container.innerHTML += `
+                        <div class="flex justify-end">
+                            <div class="bg-emerald-600 text-white rounded-2xl p-3 max-w-[80%] text-sm shadow">
+                                ${imgHtml}
+                                ${escapeHtml(msg.text)}
+                            </div>
+                        </div>`;
+                } else {
+                    container.innerHTML += `
+                        <div class="flex justify-start">
+                            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-3 max-w-[80%] text-sm text-slate-200 shadow">
+                                ${marked.parse(msg.text)}
+                            </div>
+                        </div>`;
+                }
+            });
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function clearHistory() {
+            if (confirm("Clear chat history?")) {
+                chatHistory = [];
+                localStorage.removeItem('mico_ai_history');
+                renderChat();
+            }
+        }
+
         function handleImageSelect(event) {
             const file = event.target.files[0];
             if (!file) return;
-
             selectedMimeType = file.type;
             const reader = new FileReader();
             reader.onload = function(e) {
@@ -115,26 +151,17 @@
             const text = inputField.value.trim();
             if (!text && !selectedBase64Image) return;
 
-            let userHtmlContent = escapeHtml(text);
             let currentImg = selectedBase64Image;
             let currentMime = selectedMimeType;
+            let imageUrlForStorage = currentImg ? `data:${currentMime};base64,${currentImg}` : null;
 
-            // Append User Message with optional image preview
-            let imageDisplayHtml = currentImg ? `<div class="mb-2"><img src="data:${currentMime};base64,${currentImg}" class="rounded-lg max-h-32 object-cover border border-emerald-500/30"></div>` : '';
-
-            chatContainer.innerHTML += `
-                <div class="flex justify-end">
-                    <div class="bg-emerald-600 text-white rounded-2xl p-3 max-w-[80%] text-sm shadow">
-                        ${imageDisplayHtml}
-                        ${userHtmlContent}
-                    </div>
-                </div>`;
+            chatHistory.push({ role: 'user', text: text, image: imageUrlForStorage });
+            localStorage.setItem('mico_ai_history', JSON.stringify(chatHistory));
             
             inputField.value = '';
             clearImage();
-            chatContainer.scrollTop = chatContainer.scrollHeight;
+            renderChat();
 
-            // Loading bubble
             const loadingId = 'loading-' + Date.now();
             chatContainer.innerHTML += `
                 <div id="${loadingId}" class="flex justify-start">
@@ -144,26 +171,23 @@
                 </div>`;
             chatContainer.scrollTop = chatContainer.scrollHeight;
 
-            // Build API payload parts
-            let parts = [];
-            if (currentImg) {
-                parts.push({
-                    inline_data: {
-                        mime_type: currentMime,
-                        data: currentImg
-                    }
-                });
-            }
-            if (text) {
-                parts.push({ text: text });
-            }
+            // Map chat history into API contents structure
+            let contents = chatHistory.slice(-8).map(item => ({
+                role: item.role === 'user' ? 'user' : 'model',
+                parts: item.role === 'user' 
+                    ? (item.image ? [{ inline_data: { mime_type: "image/jpeg", data: item.image.split(',')[1] } }, { text: item.text || "Analyze this image" }] : [{ text: item.text }])
+                    : [{ text: item.text }]
+            }));
 
             try {
                 const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        contents: [{ parts: parts }]
+                        system_instruction: {
+                            parts: [{ text: "You are M I C O AI, an elite, high-performance AI assistant created for M I C O. Be sharp, direct, highly capable in coding, gaming, and academics, and format your responses cleanly with markdown and code blocks when needed." }]
+                        },
+                        contents: contents
                     })
                 });
 
@@ -176,13 +200,10 @@
 
                 const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || "No response received.";
 
-                // Append AI Response
-                chatContainer.innerHTML += `
-                    <div class="flex justify-start">
-                        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-3 max-w-[80%] text-sm text-slate-200 shadow">
-                            ${escapeHtml(reply)}
-                        </div>
-                    </div>`;
+                chatHistory.push({ role: 'model', text: reply });
+                localStorage.setItem('mico_ai_history', JSON.stringify(chatHistory));
+                renderChat();
+
             } catch (err) {
                 document.getElementById(loadingId).remove();
                 chatContainer.innerHTML += `
@@ -203,6 +224,8 @@
         document.getElementById('user-input').addEventListener('keypress', function (e) {
             if (e.key === 'Enter') sendMessage();
         });
+
+        renderChat();
     </script>
 </body>
 </html>
